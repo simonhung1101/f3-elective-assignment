@@ -171,10 +171,10 @@ def assign_students(config, students_df):
                     (row.get('ApL_Preference_Score', 0) or 0) +
                     (row.get('Interview_Score', 0) or 0)
                 )
-                students.loc[idx, '_apl_composite'] = composite
+                students.loc[idx, 'ApL_Score'] = composite
 
-            students['_apl_composite'] = students.get('_apl_composite', 0.0)
-            apl_sorted = students.loc[apl_idx].sort_values('_apl_composite', ascending=False)
+            students['ApL_Score'] = students.get('ApL_Score', float('nan'))
+            apl_sorted = students.loc[apl_idx].sort_values('ApL_Score', ascending=False)
 
             rem_apl = {s: _cap(config, 3, s) for s in b3a}
             for idx in apl_sorted.index:
@@ -193,15 +193,13 @@ def assign_students(config, students_df):
                             level = rank
                             logs.append(
                                 f"B3B: {row['Student Name']} -> {subj} (choice #{rank}, "
-                                f"composite: {students.loc[idx, '_apl_composite']:.1f})"
+                                f"composite: {students.loc[idx, 'ApL_Score']:.1f})"
                             )
                             break
                     if assigned:
                         break
                 students.loc[idx, 'Block3_Assigned'] = assigned
                 students.loc[idx, 'B3_Choice_Level'] = level
-
-            students.drop(columns=['_apl_composite'], inplace=True, errors='ignore')
 
     for idx in students.index:
         b3 = students.loc[idx, 'Block3_Assigned']

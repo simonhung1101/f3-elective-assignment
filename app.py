@@ -412,13 +412,16 @@ def render_results_page():
     display_cols = [
         'Student Name', 'Class', 'Class_No', 'Marks',
         'Block1_Assigned', 'Block2_Assigned', 'Block3_Assigned',
-        'Student_Type', 'B1_Choice_Level', 'B2_Choice_Level', 'B3_Choice_Level',
+        'Student_Type', 'ApL_Score',
+        'B1_Choice_Level', 'B2_Choice_Level', 'B3_Choice_Level',
     ]
-    display = results[display_cols].copy()
+    avail = [c for c in display_cols if c in results.columns]
+    display = results[avail].copy()
     for col in ['B1_Choice_Level', 'B2_Choice_Level', 'B3_Choice_Level']:
-        display[col] = display[col].map(
-            lambda x: f"{x}st" if x == 1 else f"{x}nd" if x == 2 else f"{x}rd" if x == 3 else f"{x}th" if x >= 4 else "Unassigned"
-        )
+        if col in display.columns:
+            display[col] = display[col].map(
+                lambda x: f"{x}st" if x == 1 else f"{x}nd" if x == 2 else f"{x}rd" if x == 3 else f"{x}th" if x >= 4 else "Unassigned"
+            )
 
     st.dataframe(display, use_container_width=True, hide_index=True)
 
