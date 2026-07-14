@@ -286,11 +286,14 @@ def render_run_page():
 
     run_cols = st.columns([1, 1, 1])
     all_unique = get_all_unique_normal(cfg)
-    total_cap = sum(cfg['capacities'].get(s, 25) for s in cfg['block_1'])
+    def _bsum(block_num, subjects):
+        bc = cfg.get('capacities', {}).get(block_num, {})
+        return sum(bc.get(s, 25) for s in subjects if s)
+    total_cap = _bsum(1, cfg['block_1'])
     run_cols[0].metric("Block 1 Total Capacity", total_cap)
-    total_cap2 = sum(cfg['capacities'].get(s, 25) for s in cfg['block_2'])
+    total_cap2 = _bsum(2, cfg['block_2'])
     run_cols[1].metric("Block 2 Total Capacity", total_cap2)
-    total_cap3 = sum(cfg['capacities'].get(s, 25) for s in (cfg['block_3_normal'] + cfg['block_3_apl']))
+    total_cap3 = _bsum(3, cfg['block_3_normal'] + cfg['block_3_apl'])
     run_cols[2].metric("Block 3 Total Capacity", total_cap3)
 
     n_students = len(st.session_state.students_raw)
