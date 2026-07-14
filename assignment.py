@@ -164,12 +164,14 @@ def assign_students(config, students_df):
         if apl_mask.any():
             apl_idx = students[apl_mask].index.tolist()
             max_m = max(students['Marks'].max(), 1)
+            students['ApL_Preference_Score'] = students['ApL_Preference_Score'].fillna(0)
+            students['Interview_Score'] = students['Interview_Score'].fillna(0)
             for idx in apl_idx:
                 row = students.loc[idx]
                 composite = (
                     (row['Marks'] / max_m * 100) * 0.6 +
-                    (row.get('ApL_Preference_Score', 0) or 0) +
-                    (row.get('Interview_Score', 0) or 0)
+                    row['ApL_Preference_Score'] +
+                    row['Interview_Score']
                 )
                 students.loc[idx, 'ApL_Score'] = composite
 
