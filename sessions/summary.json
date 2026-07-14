@@ -1,0 +1,176 @@
+{
+  "total_students": 121,
+  "type_3x": 46,
+  "type_2x_a": 75,
+  "type_partial": 0,
+  "Block 1": {
+    "choice_1": {
+      "count": 109,
+      "pct": 90.1
+    },
+    "choice_2": {
+      "count": 11,
+      "pct": 9.1
+    },
+    "choice_3": {
+      "count": 1,
+      "pct": 0.8
+    },
+    "choice_4": {
+      "count": 0,
+      "pct": 0.0
+    },
+    "choice_5": {
+      "count": 0,
+      "pct": 0.0
+    },
+    "unassigned": {
+      "count": 0,
+      "pct": 0.0
+    }
+  },
+  "Block 2": {
+    "choice_1": {
+      "count": 98,
+      "pct": 81.0
+    },
+    "choice_2": {
+      "count": 7,
+      "pct": 5.8
+    },
+    "choice_3": {
+      "count": 6,
+      "pct": 5.0
+    },
+    "choice_4": {
+      "count": 8,
+      "pct": 6.6
+    },
+    "choice_5": {
+      "count": 2,
+      "pct": 1.7
+    },
+    "unassigned": {
+      "count": 0,
+      "pct": 0.0
+    }
+  },
+  "Block 3": {
+    "choice_1": {
+      "count": 81,
+      "pct": 66.9
+    },
+    "choice_2": {
+      "count": 27,
+      "pct": 22.3
+    },
+    "choice_3": {
+      "count": 10,
+      "pct": 8.3
+    },
+    "choice_4": {
+      "count": 3,
+      "pct": 2.5
+    },
+    "choice_5": {
+      "count": 0,
+      "pct": 0.0
+    },
+    "unassigned": {
+      "count": 0,
+      "pct": 0.0
+    }
+  },
+  "subject_enrollment": {
+    "Block 1_化學": {
+      "subject": "化學",
+      "block": "Block 1",
+      "enrolled": 25,
+      "capacity": 25
+    },
+    "Block 1_資通": {
+      "subject": "資通",
+      "block": "Block 1",
+      "enrolled": 20,
+      "capacity": 25
+    },
+    "Block 1_中史": {
+      "subject": "中史",
+      "block": "Block 1",
+      "enrolled": 25,
+      "capacity": 25
+    },
+    "Block 1_經濟": {
+      "subject": "經濟",
+      "block": "Block 1",
+      "enrolled": 25,
+      "capacity": 25
+    },
+    "Block 1_生物": {
+      "subject": "生物",
+      "block": "Block 1",
+      "enrolled": 26,
+      "capacity": 26
+    },
+    "Block 2_企財": {
+      "subject": "企財",
+      "block": "Block 2",
+      "enrolled": 25,
+      "capacity": 25
+    },
+    "Block 2_旅款": {
+      "subject": "旅款",
+      "block": "Block 2",
+      "enrolled": 25,
+      "capacity": 25
+    },
+    "Block 2_歷史": {
+      "subject": "歷史",
+      "block": "Block 2",
+      "enrolled": 21,
+      "capacity": 25
+    },
+    "Block 2_物理": {
+      "subject": "物理",
+      "block": "Block 2",
+      "enrolled": 25,
+      "capacity": 25
+    },
+    "Block 2_地理": {
+      "subject": "地理",
+      "block": "Block 2",
+      "enrolled": 25,
+      "capacity": 25
+    },
+    "Block 3_數學M1": {
+      "subject": "數學M1",
+      "block": "Block 3",
+      "enrolled": 20,
+      "capacity": 20
+    },
+    "Block 3_生物": {
+      "subject": "生物",
+      "block": "Block 3",
+      "enrolled": 26,
+      "capacity": 26
+    },
+    "Block 3_時裝": {
+      "subject": "時裝",
+      "block": "Block 3",
+      "enrolled": 26,
+      "capacity": 30
+    },
+    "Block 3_甜品": {
+      "subject": "甜品",
+      "block": "Block 3",
+      "enrolled": 24,
+      "capacity": 24
+    },
+    "Block 3_電遊": {
+      "subject": "電遊",
+      "block": "Block 3",
+      "enrolled": 25,
+      "capacity": 25
+    }
+  }
+}
