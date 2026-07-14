@@ -9,6 +9,7 @@ from utils import (
     create_template_bytes, parse_uploaded_excel, validate_imported_data,
     export_results_to_bytes, generate_summary,
 )
+import cloud_storage
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
@@ -26,6 +27,16 @@ if 'summary' not in st.session_state:
     st.session_state.summary = None
 if 'import_errors' not in st.session_state:
     st.session_state.import_errors = []
+if '_cloud_loaded' not in st.session_state:
+    config, students, results, summary, msg = cloud_storage.load_session()
+    if config is not None:
+        st.session_state.config = config
+        st.session_state.students_raw = students
+        st.session_state.results = results
+        st.session_state.summary = summary
+        st.session_state._cloud_loaded = msg
+    else:
+        st.session_state._cloud_loaded = False
 
 
 def render_config_page():
@@ -402,6 +413,39 @@ def main():
     st.sidebar.markdown(f"**Students loaded:** {n_students}")
     has_results = st.session_state.results is not None
     st.sidebar.markdown(f"**Results:** {'✅ Ready' if has_results else '❌ Not run'}")
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Cloud Storage")
+    if cloud_storage.is_configured():
+        st.sidebar.success("🔗 GitHub connected")
+        if st.session_state._cloud_loaded:
+            st.sidebar.caption("Session auto-loaded from cloud")
+        col1, col2 = st.sidebar.columns(2)
+        if col1.button("💾 Save"):
+            c, s, r, sm = (st.session_state.config,
+                           st.session_state.students_raw,
+                           st.session_state.results,
+                           st.session_state.summary)
+            ok, msg = cloud_storage.save_session(c, s, r, sm)
+            if ok:
+                st.sidebar.success(msg)
+            else:
+                st.sidebar.error(msg)
+            st.rerun()
+        if col2.button("📂 Load"):
+            config, students, results, summary, msg = cloud_storage.load_session()
+            if config is not None:
+                st.session_state.config = config
+                st.session_state.students_raw = students
+                st.session_state.results = results
+                st.session_state.summary = summary
+                st.sidebar.success(msg)
+            else:
+                st.sidebar.warning(msg)
+            st.rerun()
+    else:
+        st.sidebar.warning("☁️ Cloud not connected")
+        st.sidebar.caption("Set GITHUB_TOKEN in Streamlit secrets to enable")
 
     st.sidebar.markdown("---")
     page = st.sidebar.radio(
