@@ -1,0 +1,427 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import os
+
+from assignment import assign_students, get_all_unique_normal
+from utils import (
+    get_default_config, validate_config, save_config_json, load_config_json,
+    create_template_bytes, parse_uploaded_excel, validate_imported_data,
+    export_results_to_bytes, generate_summary,
+)
+
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+st.set_page_config(page_title="F3 Elective Assignment", layout="wide")
+
+if 'config' not in st.session_state:
+    st.session_state.config = get_default_config()
+if 'students_raw' not in st.session_state:
+    st.session_state.students_raw = None
+if 'results' not in st.session_state:
+    st.session_state.results = None
+if 'logs' not in st.session_state:
+    st.session_state.logs = []
+if 'summary' not in st.session_state:
+    st.session_state.summary = None
+if 'import_errors' not in st.session_state:
+    st.session_state.import_errors = []
+
+
+def render_config_page():
+    st.header("Configuration")
+    cfg = st.session_state.config
+
+    cfg['academic_year'] = st.text_input("Academic Year", value=cfg['academic_year'],
+                                          placeholder="e.g. 2025-2026")
+
+    cols = st.columns(2)
+    with cols[0]:
+        st.subheader("Block 1 (5 Normal Subjects)")
+        b1_names = []
+        b1_caps = []
+        for i in range(5):
+            c1, c2 = st.columns([3, 1])
+            val = cfg.get('block_1', [''] * 5)[i]
+            name = c1.text_input(f"Subject {i + 1}", value=val, key=f"b1_{i}")
+            cap = c2.number_input(f"Cap", min_value=1, max_value=99,
+                                  value=cfg['capacities'].get(name, 25) if name else 25,
+                                  key=f"b1_cap_{i}")
+            b1_names.append(name)
+            b1_caps.append((name, cap))
+
+    with cols[1]:
+        st.subheader("Block 2 (5 Normal Subjects)")
+        b2_names = []
+        b2_caps = []
+        for i in range(5):
+            c1, c2 = st.columns([3, 1])
+            val = cfg.get('block_2', [''] * 5)[i]
+            name = c1.text_input(f"Subject {i + 1}", value=val, key=f"b2_{i}")
+            cap = c2.number_input(f"Cap", min_value=1, max_value=99,
+                                  value=cfg['capacities'].get(name, 25) if name else 25,
+                                  key=f"b2_cap_{i}")
+            b2_names.append(name)
+            b2_caps.append((name, cap))
+
+    st.subheader("Block 3")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Normal Subjects**")
+        b3n_names = []
+        b3n_caps = []
+        for i in range(2):
+            col1, col2 = st.columns([3, 1])
+            val = cfg.get('block_3_normal', [''] * 2)[i]
+            name = col1.text_input(f"Subject {i + 1}", value=val, key=f"b3n_{i}")
+            cap = col2.number_input(f"Cap", min_value=1, max_value=99,
+                                    value=cfg['capacities'].get(name, 25) if name else 25,
+                                    key=f"b3n_cap_{i}")
+            b3n_names.append(name)
+            b3n_caps.append((name, cap))
+
+    with c2:
+        st.markdown("**Applied Learning (ApL)**")
+        b3a_names = []
+        b3a_caps = []
+        for i in range(3):
+            col1, col2 = st.columns([3, 1])
+            val = cfg.get('block_3_apl', [''] * 3)[i]
+            name = col1.text_input(f"Subject {i + 1}", value=val, key=f"b3a_{i}")
+            cap = col2.number_input(f"Cap", min_value=1, max_value=99,
+                                    value=cfg['capacities'].get(name, 15) if name else 15,
+                                    key=f"b3a_cap_{i}")
+            b3a_names.append(name)
+            b3a_caps.append((name, cap))
+
+    common = [s for s in b1_names if s and s in b2_names]
+    if len(common) == 1:
+        cfg['repeated_subject'] = common[0]
+        st.info(f"Repeated subject (appears in both Block 1 & 2): **{common[0]}**")
+    elif len(common) > 1:
+        cfg['repeated_subject'] = st.selectbox("Select repeated subject:", common)
+    else:
+        cfg['repeated_subject'] = ""
+        if all(b1_names) and all(b2_names):
+            st.warning("No subject appears in both Block 1 and Block 2. "
+                       "Add the same subject name to both blocks to set a repeated subject.")
+
+    if st.button("Save Configuration"):
+        cfg['block_1'] = b1_names
+        cfg['block_2'] = b2_names
+        cfg['block_3_normal'] = b3n_names
+        cfg['block_3_apl'] = b3a_names
+        caps = {}
+        for name, cap in b1_caps + b2_caps + b3n_caps + b3a_caps:
+            if name:
+                caps[name] = cap
+        cfg['capacities'] = caps
+
+        errors = validate_config(cfg)
+        if errors:
+            for e in errors:
+                st.error(e)
+        else:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            fpath = os.path.join(DATA_DIR, f"config_{cfg['academic_year'].replace('/', '-')}.json")
+            save_config_json(cfg, fpath)
+            st.session_state.config = cfg
+            st.success(f"Configuration saved to {fpath}")
+            st.balloons()
+
+    st.divider()
+    st.subheader("Load Existing Configuration")
+    if os.path.isdir(DATA_DIR):
+        config_files = [f for f in os.listdir(DATA_DIR) if f.endswith('.json')]
+        if config_files:
+            selected = st.selectbox("Select saved config:", config_files)
+            if st.button("Load Config"):
+                fpath = os.path.join(DATA_DIR, selected)
+                loaded = load_config_json(fpath)
+                st.session_state.config = loaded
+                st.rerun()
+        else:
+            st.info("No saved configurations found.")
+
+
+def render_import_page():
+    st.header("Data Import")
+    cfg = st.session_state.config
+
+    errors = validate_config(cfg)
+    if errors:
+        st.warning("Please complete the Configuration page first.")
+        for e in errors:
+            st.error(e)
+        return
+
+    with st.expander("Download Template", expanded=False):
+        if st.button("Generate Blank Template (.xlsx)"):
+            template_bytes = create_template_bytes(cfg)
+            st.download_button(
+                label="Download Template",
+                data=template_bytes,
+                file_name=f"elective_template_{cfg['academic_year']}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        all_unique = get_all_unique_normal(cfg)
+        mapping = {"Column": [], "Maps To": []}
+        for i, s in enumerate(cfg['block_1']):
+            mapping["Column"].append(f"B1_Pref_{i + 1}")
+            mapping["Maps To"].append(s)
+        for i, s in enumerate(cfg['block_2']):
+            mapping["Column"].append(f"B2_Pref_{i + 1}")
+            mapping["Maps To"].append(s)
+        for i, s in enumerate(cfg['block_3_normal'] + cfg['block_3_apl']):
+            mapping["Column"].append(f"B3_Pref_{i + 1}")
+            mapping["Maps To"].append(s)
+        for i, s in enumerate(all_unique):
+            mapping["Column"].append(f"Overall_Pref_{i + 1}")
+            mapping["Maps To"].append(s)
+        st.table(pd.DataFrame(mapping))
+
+    st.divider()
+    uploaded = st.file_uploader("Upload student data (.xlsx)", type=["xlsx"])
+
+    if uploaded:
+        try:
+            df = parse_uploaded_excel(uploaded, cfg)
+            st.success(f"Loaded {len(df)} student records.")
+
+            errs = validate_imported_data(df, cfg)
+            if errs:
+                st.session_state.import_errors = errs
+                with st.expander(f"Validation Errors ({len(errs)})", expanded=True):
+                    for e in errs:
+                        st.error(e)
+            else:
+                st.session_state.import_errors = []
+
+            st.subheader("Preview")
+            display_cols = ["Student Name", "Class", "Class_No", "Marks"]
+            st.dataframe(df[display_cols].head(20), use_container_width=True,
+                         hide_index=True)
+            st.caption(f"Showing first {min(20, len(df))} of {len(df)} rows")
+
+            st.subheader("Edit Student Data")
+            edited = st.data_editor(
+                df,
+                use_container_width=True,
+                hide_index=True,
+                num_rows="dynamic",
+                key="data_editor",
+            )
+            if st.button("Apply Changes"):
+                st.session_state.students_raw = edited
+                st.success(f"Saved {len(edited)} student records to session.")
+                st.rerun()
+
+        except Exception as ex:
+            st.error(f"Error reading file: {ex}")
+
+    if st.session_state.students_raw is not None and uploaded is None:
+        st.info(f"Currently loaded: {len(st.session_state.students_raw)} students from previous import.")
+        if st.button("Clear Imported Data"):
+            st.session_state.students_raw = None
+            st.rerun()
+
+
+def render_run_page():
+    st.header("Run Assignment")
+    cfg = st.session_state.config
+
+    if st.session_state.students_raw is None:
+        st.warning("No student data loaded. Go to Data Import page first.")
+        return
+
+    errors = validate_config(cfg)
+    if errors:
+        for e in errors:
+            st.error(e)
+        return
+
+    st.info(f"Ready to assign **{len(st.session_state.students_raw)}** students.")
+
+    run_cols = st.columns([1, 1, 1])
+    all_unique = get_all_unique_normal(cfg)
+    total_cap = sum(cfg['capacities'].get(s, 25) for s in cfg['block_1'])
+    run_cols[0].metric("Block 1 Total Capacity", total_cap)
+    total_cap2 = sum(cfg['capacities'].get(s, 25) for s in cfg['block_2'])
+    run_cols[1].metric("Block 2 Total Capacity", total_cap2)
+    total_cap3 = sum(cfg['capacities'].get(s, 25) for s in (cfg['block_3_normal'] + cfg['block_3_apl']))
+    run_cols[2].metric("Block 3 Total Capacity", total_cap3)
+
+    n_students = len(st.session_state.students_raw)
+    if total_cap < n_students:
+        st.warning(f"⚠️ Block 1 capacity ({total_cap}) < students ({n_students})!")
+    if total_cap2 < n_students:
+        st.warning(f"⚠️ Block 2 capacity ({total_cap2}) < students ({n_students})!")
+    if total_cap3 < n_students:
+        st.warning(f"⚠️ Block 3 capacity ({total_cap3}) < students ({n_students})!")
+
+    if st.button("▶ Run Assignment", type="primary", use_container_width=True):
+        with st.spinner("Running assignment algorithm..."):
+            df = st.session_state.students_raw.copy()
+            results, logs = assign_students(cfg, df)
+            st.session_state.results = results
+            st.session_state.logs = logs
+            st.session_state.summary = generate_summary(results, cfg)
+
+        st.success("Assignment completed!")
+        st.balloons()
+
+    if st.session_state.results is not None:
+        st.divider()
+        st.subheader("Assignment Summary")
+        s = st.session_state.summary
+        if s:
+            mcols = st.columns(5)
+            mcols[0].metric("Total Students", s['total_students'])
+            mcols[1].metric("3X (Normal all blocks)", s['type_3x'])
+            mcols[2].metric("2X+A (ApL in Block 3)", s['type_2x_a'])
+            mcols[3].metric("Partial", s['type_partial'])
+            assigned = s['type_3x'] + s['type_2x_a']
+            mcols[4].metric("Successfully Assigned", assigned)
+
+            st.subheader("Choice Satisfaction by Block")
+            for label in ['Block 1', 'Block 2', 'Block 3']:
+                stats = s.get(label, {})
+                cols = st.columns(6)
+                cols[0].markdown(f"**{label}**")
+                for i in range(1, 6):
+                    d = stats.get(f'choice_{i}', {})
+                    suffix = "st" if i == 1 else "nd" if i == 2 else "rd" if i == 3 else "th"
+                    cols[i].metric(f"{i}{suffix}",
+                                   d.get('count', 0))
+                un = stats.get('unassigned', {})
+                cols_c = st.columns([1] + [1] * 5)
+                cols_c[0].markdown("")
+                for i in range(1, 6):
+                    d = stats.get(f'choice_{i}', {})
+                    cols_c[i].caption(f"{d.get('pct', 0)}%")
+                cols_c2 = st.columns([1] + [5])
+                cols_c2[1].metric("Unassigned", un.get('count', 0))
+
+    with st.expander("View Assignment Log", expanded=False):
+        if st.session_state.logs:
+            st.code("\n".join(st.session_state.logs[-200:]), language="text")
+        else:
+            st.info("No log entries yet.")
+
+
+def render_results_page():
+    st.header("Results")
+    if st.session_state.results is None:
+        st.warning("No results yet. Run the assignment first.")
+        return
+
+    cfg = st.session_state.config
+    results = st.session_state.results
+    s = st.session_state.summary
+
+    st.subheader("Dashboard")
+    mcols = st.columns(5)
+    mcols[0].metric("Total Students", s['total_students'])
+    mcols[1].metric("3X Students", s['type_3x'])
+    mcols[2].metric("2X+A Students", s['type_2x_a'])
+    assigned = s['type_3x'] + s['type_2x_a']
+    mcols[3].metric("Assigned", assigned)
+    pct_assigned = round(assigned / s['total_students'] * 100, 1) if s['total_students'] > 0 else 0
+    mcols[4].metric("Assignment Rate", f"{pct_assigned}%")
+
+    se_data = []
+    for key, val in s['subject_enrollment'].items():
+        se_data.append(val)
+    if se_data:
+        se_df = pd.DataFrame(se_data)
+        se_df['pct'] = (se_df['enrolled'] / se_df['capacity'] * 100).round(1)
+
+        fig = px.bar(
+            se_df, x='subject', y=['enrolled', 'capacity'],
+            barmode='group', facet_col='block', facet_col_wrap=1,
+            title='Enrollment vs Capacity by Subject',
+            labels={'value': 'Students', 'subject': 'Subject', 'variable': 'Metric'},
+            color_discrete_map={'enrolled': '#1f77b4', 'capacity': '#ff7f0e'},
+        )
+        fig.update_layout(height=500)
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+    st.subheader("Choice Satisfaction")
+    sat_cols = st.columns(3)
+    for i, label in enumerate(['Block 1', 'Block 2', 'Block 3']):
+        stats = s.get(label, {})
+        def _sfx(j): return "st" if j == 1 else "nd" if j == 2 else "rd" if j == 3 else "th"
+        data = {
+            'Choice': [f"{j}{_sfx(j)}" for j in range(1, 6)]
+                      + ['Unassigned'],
+            'Students': [stats.get(f'choice_{j}', {}).get('count', 0) for j in range(1, 6)]
+                        + [stats.get('unassigned', {}).get('count', 0)],
+        }
+        dff = pd.DataFrame(data)
+        fig = px.pie(dff, values='Students', names='Choice',
+                     title=f'{label} Satisfaction',
+                     color_discrete_sequence=px.colors.qualitative.Set2)
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+        sat_cols[i].plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+    st.subheader("Detailed Results")
+    display_cols = [
+        'Student Name', 'Class', 'Class_No', 'Marks',
+        'Block1_Assigned', 'Block2_Assigned', 'Block3_Assigned',
+        'Student_Type', 'B1_Choice_Level', 'B2_Choice_Level', 'B3_Choice_Level',
+    ]
+    display = results[display_cols].copy()
+    for col in ['B1_Choice_Level', 'B2_Choice_Level', 'B3_Choice_Level']:
+        display[col] = display[col].map(
+            lambda x: f"{x}st" if x == 1 else f"{x}nd" if x == 2 else f"{x}rd" if x == 3 else f"{x}th" if x >= 4 else "Unassigned"
+        )
+
+    st.dataframe(display, use_container_width=True, hide_index=True)
+
+    csv = display.to_csv(index=False).encode('utf-8-sig')
+    col1, col2 = st.columns(2)
+    col1.download_button("📥 Download as CSV", data=csv,
+                          file_name=f"elective_results_{cfg['academic_year']}.csv",
+                          mime="text/csv")
+    excel_bytes = export_results_to_bytes(results, cfg)
+    col2.download_button("📥 Download as Excel (.xlsx)", data=excel_bytes,
+                          file_name=f"elective_results_{cfg['academic_year']}.xlsx",
+                          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def main():
+    st.sidebar.title("🎓 F3 Elective Assignment")
+    st.sidebar.markdown("---")
+
+    cfg = st.session_state.config
+    if cfg.get('academic_year'):
+        st.sidebar.markdown(f"**Year:** {cfg['academic_year']}")
+    n_students = len(st.session_state.students_raw) if st.session_state.students_raw is not None else 0
+    st.sidebar.markdown(f"**Students loaded:** {n_students}")
+    has_results = st.session_state.results is not None
+    st.sidebar.markdown(f"**Results:** {'✅ Ready' if has_results else '❌ Not run'}")
+
+    st.sidebar.markdown("---")
+    page = st.sidebar.radio(
+        "Navigate",
+        ["Configuration", "Data Import", "Run Assignment", "Results"],
+        index=["Configuration", "Data Import", "Run Assignment", "Results"].index(
+            st.session_state.get('page', 'Configuration')
+        ),
+    )
+    st.session_state.page = page
+
+    if page == "Configuration":
+        render_config_page()
+    elif page == "Data Import":
+        render_import_page()
+    elif page == "Run Assignment":
+        render_run_page()
+    elif page == "Results":
+        render_results_page()
+
+
+if __name__ == "__main__":
+    main()
