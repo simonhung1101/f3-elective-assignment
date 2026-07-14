@@ -25,6 +25,10 @@ def _get_overall_rank(row, subject_name, all_normal):
     return 99
 
 
+def _cap(config, block_num, subject):
+    return config.get('capacities', {}).get(block_num, {}).get(subject, 25)
+
+
 def _assign_block(students, subjects, pref_cols, remaining, all_unique,
                   assign_col, choice_col, log_prefix):
     logs = []
@@ -58,6 +62,50 @@ def _assign_block(students, subjects, pref_cols, remaining, all_unique,
     return students, logs
 
 
+def _resolve_pair(students, a_subjs, b_subjs, a_pref_cols, b_pref_cols,
+                  a_col, b_col, a_label, b_label,
+                  repeated, all_unique, logs):
+    mask = (students[a_col] == repeated) & (students[b_col] == repeated)
+    for idx in students[mask].index:
+        row = students.loc[idx]
+        ap = row[a_pref_cols].values
+        bp = row[b_pref_cols].values
+
+        a_fb = None
+        b_fb = None
+        for rank in range(1, 6):
+            if a_fb is None:
+                c = [a_subjs[i] for i, p in enumerate(ap) if p == rank and a_subjs[i] != repeated]
+                if c:
+                    a_fb = c[0]
+            if b_fb is None:
+                c = [b_subjs[i] for i, p in enumerate(bp) if p == rank and b_subjs[i] != repeated]
+                if c:
+                    b_fb = c[0]
+
+        if a_fb and b_fb:
+            r1 = _get_overall_rank(row, a_fb, all_unique)
+            r2 = _get_overall_rank(row, b_fb, all_unique)
+            if r1 <= r2:
+                students.loc[idx, a_col] = a_fb
+                students.loc[idx, b_col] = repeated
+                logs.append(f"CONFLICT: {row['Student Name']}: {repeated} resolved, {a_label}->{a_fb}, {b_label}->{repeated}")
+            else:
+                students.loc[idx, a_col] = repeated
+                students.loc[idx, b_col] = b_fb
+                logs.append(f"CONFLICT: {row['Student Name']}: {repeated} resolved, {a_label}->{repeated}, {b_label}->{b_fb}")
+        elif a_fb:
+            students.loc[idx, a_col] = a_fb
+            students.loc[idx, b_col] = repeated
+            logs.append(f"CONFLICT: {row['Student Name']}: {repeated} partially resolved, {a_label}->{a_fb}, {b_label}->{repeated}")
+        elif b_fb:
+            students.loc[idx, a_col] = repeated
+            students.loc[idx, b_col] = b_fb
+            logs.append(f"CONFLICT: {row['Student Name']}: {repeated} partially resolved, {a_label}->{repeated}, {b_label}->{b_fb}")
+        else:
+            logs.append(f"CONFLICT: {row['Student Name']}: {repeated} cannot be resolved!")
+
+
 def assign_students(config, students_df):
     students = students_df.copy()
 
@@ -75,45 +123,46 @@ def assign_students(config, students_df):
     students['B3_Choice_Level'] = 0
     students['Student_Type'] = ''
 
-    b1_subjects = config['block_1']
-    b2_subjects = config['block_2']
-    b3_normal = config['block_3_normal']
-    b3_apl = config['block_3_apl']
-    b3_all = b3_normal + b3_apl
-    repeated = config.get('repeated_subject', '')
+    b1_subs = config['block_1']
+    b2_subs = config['block_2']
+    b3n = config['block_3_normal']
+    b3a = config['block_3_apl']
+    b3_all = b3n + b3a
 
-    b1_pref_cols = ['B1_Pref_1', 'B1_Pref_2', 'B1_Pref_3', 'B1_Pref_4', 'B1_Pref_5']
-    b2_pref_cols = ['B2_Pref_1', 'B2_Pref_2', 'B2_Pref_3', 'B2_Pref_4', 'B2_Pref_5']
-    b3_pref_cols = ['B3_Pref_1', 'B3_Pref_2', 'B3_Pref_3', 'B3_Pref_4', 'B3_Pref_5']
+    b1_pc = ['B1_Pref_1', 'B1_Pref_2', 'B1_Pref_3', 'B1_Pref_4', 'B1_Pref_5']
+    b2_pc = ['B2_Pref_1', 'B2_Pref_2', 'B2_Pref_3', 'B2_Pref_4', 'B2_Pref_5']
+    b3_pc = ['B3_Pref_1', 'B3_Pref_2', 'B3_Pref_3', 'B3_Pref_4', 'B3_Pref_5']
 
     all_unique = get_all_unique_normal(config)
     logs = []
 
-    caps = config['capacities']
+    ri = config.get('repeated_subject', {})
+    if isinstance(ri, dict):
+        rep_name = ri.get('name', '')
+        rep_blocks = ri.get('blocks', [])
+    else:
+        rep_name = ri
+        rep_blocks = [1, 2]
 
-    remaining_b1 = {s: caps.get(s, 25) for s in b1_subjects}
-    students, l1 = _assign_block(students, b1_subjects, b1_pref_cols,
-                                  remaining_b1, all_unique,
+    remaining_b1 = {s: _cap(config, 1, s) for s in b1_subs}
+    students, l1 = _assign_block(students, b1_subs, b1_pc, remaining_b1, all_unique,
                                   'Block1_Assigned', 'B1_Choice_Level', 'B1')
     logs.extend(l1)
 
-    remaining_b2 = {s: caps.get(s, 25) for s in b2_subjects}
-    students, l2 = _assign_block(students, b2_subjects, b2_pref_cols,
-                                  remaining_b2, all_unique,
+    remaining_b2 = {s: _cap(config, 2, s) for s in b2_subs}
+    students, l2 = _assign_block(students, b2_subs, b2_pc, remaining_b2, all_unique,
                                   'Block2_Assigned', 'B2_Choice_Level', 'B2')
     logs.extend(l2)
 
-    remaining_b3 = {s: caps.get(s, 25) for s in b3_all}
-    students, l3 = _assign_block(students, b3_all, b3_pref_cols,
-                                  remaining_b3, all_unique,
+    remaining_b3 = {s: _cap(config, 3, s) for s in b3_all}
+    students, l3 = _assign_block(students, b3_all, b3_pc, remaining_b3, all_unique,
                                   'Block3_Assigned', 'B3_Choice_Level', 'B3A')
     logs.extend(l3)
 
-    if b3_apl:
-        apl_mask = students['Block3_Assigned'].isin(b3_apl)
+    if b3a:
+        apl_mask = students['Block3_Assigned'].isin(b3a)
         if apl_mask.any():
             apl_idx = students[apl_mask].index.tolist()
-
             max_m = max(students['Marks'].max(), 1)
             for idx in apl_idx:
                 row = students.loc[idx]
@@ -127,19 +176,18 @@ def assign_students(config, students_df):
             students['_apl_composite'] = students.get('_apl_composite', 0.0)
             apl_sorted = students.loc[apl_idx].sort_values('_apl_composite', ascending=False)
 
-            rem_apl = {s: caps.get(s, 25) for s in b3_apl}
+            rem_apl = {s: _cap(config, 3, s) for s in b3a}
             for idx in apl_sorted.index:
                 row = students.loc[idx]
-                prefs = row[b3_pref_cols].values
+                prefs = row[b3_pc].values
                 assigned = ''
                 level = 0
-
                 for rank in range(1, 6):
                     candidates = [b3_all[i] for i, p in enumerate(prefs) if p == rank]
                     if not candidates:
                         continue
                     for subj in candidates:
-                        if subj in b3_apl and rem_apl.get(subj, 0) > 0:
+                        if subj in b3a and rem_apl.get(subj, 0) > 0:
                             assigned = subj
                             rem_apl[subj] -= 1
                             level = rank
@@ -150,7 +198,6 @@ def assign_students(config, students_df):
                             break
                     if assigned:
                         break
-
                 students.loc[idx, 'Block3_Assigned'] = assigned
                 students.loc[idx, 'B3_Choice_Level'] = level
 
@@ -162,69 +209,21 @@ def assign_students(config, students_df):
         b2 = students.loc[idx, 'Block2_Assigned']
         if not b1 or not b2 or not b3:
             students.loc[idx, 'Student_Type'] = 'Partial'
-        elif b3 in b3_apl:
+        elif b3 in b3a:
             students.loc[idx, 'Student_Type'] = '2X+A'
         else:
             students.loc[idx, 'Student_Type'] = '3X'
 
-    if repeated and repeated in b1_subjects and repeated in b2_subjects:
-        conflict_mask = (
-            (students['Block1_Assigned'] == repeated) &
-            (students['Block2_Assigned'] == repeated)
-        )
-        for idx in students[conflict_mask].index:
-            row = students.loc[idx]
-            b1p = row[b1_pref_cols].values
-            b2p = row[b2_pref_cols].values
-
-            b1_fb = None
-            b2_fb = None
-            for rank in range(1, 6):
-                if b1_fb is None:
-                    c = [b1_subjects[i] for i, p in enumerate(b1p)
-                         if p == rank and b1_subjects[i] != repeated]
-                    if c:
-                        b1_fb = c[0]
-                if b2_fb is None:
-                    c = [b2_subjects[i] for i, p in enumerate(b2p)
-                         if p == rank and b2_subjects[i] != repeated]
-                    if c:
-                        b2_fb = c[0]
-
-            if b1_fb and b2_fb:
-                r1 = _get_overall_rank(row, b1_fb, all_unique)
-                r2 = _get_overall_rank(row, b2_fb, all_unique)
-                if r1 <= r2:
-                    students.loc[idx, 'Block1_Assigned'] = b1_fb
-                    students.loc[idx, 'Block2_Assigned'] = repeated
-                    logs.append(
-                        f"CONFLICT: {row['Student Name']}: {repeated} conflict resolved, "
-                        f"B1->{b1_fb}, B2->{repeated}"
-                    )
-                else:
-                    students.loc[idx, 'Block1_Assigned'] = repeated
-                    students.loc[idx, 'Block2_Assigned'] = b2_fb
-                    logs.append(
-                        f"CONFLICT: {row['Student Name']}: {repeated} conflict resolved, "
-                        f"B1->{repeated}, B2->{b2_fb}"
-                    )
-            elif b1_fb:
-                students.loc[idx, 'Block1_Assigned'] = b1_fb
-                students.loc[idx, 'Block2_Assigned'] = repeated
-                logs.append(
-                    f"CONFLICT: {row['Student Name']}: {repeated} partially resolved, "
-                    f"B1->{b1_fb}, B2->{repeated}"
-                )
-            elif b2_fb:
-                students.loc[idx, 'Block1_Assigned'] = repeated
-                students.loc[idx, 'Block2_Assigned'] = b2_fb
-                logs.append(
-                    f"CONFLICT: {row['Student Name']}: {repeated} partially resolved, "
-                    f"B1->{repeated}, B2->{b2_fb}"
-                )
-            else:
-                logs.append(
-                    f"CONFLICT: {row['Student Name']}: {repeated} cannot be resolved!"
-                )
+    if rep_name:
+        pair_map = {
+            (1, 2): (b1_subs, b2_subs, b1_pc, b2_pc, 'Block1_Assigned', 'Block2_Assigned', 'B1', 'B2'),
+            (1, 3): (b1_subs, b3_all, b1_pc, b3_pc, 'Block1_Assigned', 'Block3_Assigned', 'B1', 'B3'),
+            (2, 3): (b2_subs, b3_all, b2_pc, b3_pc, 'Block2_Assigned', 'Block3_Assigned', 'B2', 'B3'),
+        }
+        if len(rep_blocks) == 2:
+            key = tuple(sorted(rep_blocks))
+            if key in pair_map:
+                args = pair_map[key]
+                _resolve_pair(students, *args, rep_name, all_unique, logs)
 
     return students, logs

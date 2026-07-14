@@ -13,8 +13,8 @@ def get_default_config():
         "block_2": ["", "", "", "", ""],
         "block_3_normal": ["", ""],
         "block_3_apl": ["", "", ""],
-        "repeated_subject": "",
-        "capacities": {},
+        "repeated_subject": {"name": "", "blocks": []},
+        "capacities": {1: {}, 2: {}, 3: {}},
     }
 
 
@@ -33,9 +33,26 @@ def validate_config(config):
         if not s:
             errors.append(f"Block 3 ApL subject at position {i + 1} is empty.")
 
-    repeated = config.get("repeated_subject", "")
-    if repeated and repeated not in config.get("block_1", []) + config.get("block_2", []):
-        errors.append(f"Repeated subject '{repeated}' not found in Block 1 or Block 2.")
+    ri = config.get("repeated_subject", {})
+    if isinstance(ri, dict):
+        rep_name = ri.get("name", "")
+        rep_blocks = ri.get("blocks", [])
+    else:
+        rep_name = ri
+        rep_blocks = [1, 2]
+    if rep_name:
+        all_subs = set()
+        for b in [1, 2, 3]:
+            subs = config.get(f"block_{b}", []) if b <= 2 else config.get("block_3_normal", [])
+            all_subs.update(subs)
+        if rep_name not in all_subs:
+            errors.append(f"Repeated subject '{rep_name}' not found in any block.")
+        if len(rep_blocks) != 2:
+            errors.append("Repeated subject must span exactly 2 blocks.")
+        for b in rep_blocks:
+            block_subs = config.get(f"block_{b}", []) if b <= 2 else config.get("block_3_normal", [])
+            if rep_name not in block_subs:
+                errors.append(f"Repeated subject '{rep_name}' not in Block {b} normal subjects.")
     return errors
 
 
@@ -202,18 +219,19 @@ def generate_summary(results_df, config):
     caps = config['capacities']
 
     subject_enrollment = {}
-    for block_label, subjects, assign_col in [
-        ("Block 1", b1_subjects, 'Block1_Assigned'),
-        ("Block 2", b2_subjects, 'Block2_Assigned'),
-        ("Block 3", b3_all, 'Block3_Assigned'),
+    for block_num, block_label, subjects, assign_col in [
+        (1, "Block 1", b1_subjects, 'Block1_Assigned'),
+        (2, "Block 2", b2_subjects, 'Block2_Assigned'),
+        (3, "Block 3", b3_all, 'Block3_Assigned'),
     ]:
         counts = results_df[assign_col].value_counts().to_dict()
         for s in subjects:
+            cap = caps.get(block_num, {}).get(s, 25)
             subject_enrollment[f"{block_label}_{s}"] = {
                 "subject": s,
                 "block": block_label,
                 "enrolled": counts.get(s, 0),
-                "capacity": caps.get(s, 25)
+                "capacity": cap
             }
     summary['subject_enrollment'] = subject_enrollment
 

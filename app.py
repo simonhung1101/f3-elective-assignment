@@ -39,6 +39,10 @@ if '_cloud_loaded' not in st.session_state:
         st.session_state._cloud_loaded = False
 
 
+def _block_cap(cfg, block_num, subject):
+    return cfg.get('capacities', {}).get(block_num, {}).get(subject, 25)
+
+
 def render_config_page():
     st.header("Configuration")
     cfg = st.session_state.config
@@ -46,87 +50,114 @@ def render_config_page():
     cfg['academic_year'] = st.text_input("Academic Year", value=cfg['academic_year'],
                                           placeholder="e.g. 2025-2026")
 
+    b1_names, b2_names, b3n_names, b3a_names = [], [], [], []
+
     cols = st.columns(2)
     with cols[0]:
         st.subheader("Block 1 (5 Normal Subjects)")
-        b1_names = []
-        b1_caps = []
         for i in range(5):
             c1, c2 = st.columns([3, 1])
             val = cfg.get('block_1', [''] * 5)[i]
             name = c1.text_input(f"Subject {i + 1}", value=val, key=f"b1_{i}")
             cap = c2.number_input(f"Cap", min_value=1, max_value=99,
-                                  value=cfg['capacities'].get(name, 25) if name else 25,
+                                  value=_block_cap(cfg, 1, name) if name else 25,
                                   key=f"b1_cap_{i}")
-            b1_names.append(name)
-            b1_caps.append((name, cap))
+            b1_names.append((name, cap))
 
     with cols[1]:
         st.subheader("Block 2 (5 Normal Subjects)")
-        b2_names = []
-        b2_caps = []
         for i in range(5):
             c1, c2 = st.columns([3, 1])
             val = cfg.get('block_2', [''] * 5)[i]
             name = c1.text_input(f"Subject {i + 1}", value=val, key=f"b2_{i}")
             cap = c2.number_input(f"Cap", min_value=1, max_value=99,
-                                  value=cfg['capacities'].get(name, 25) if name else 25,
+                                  value=_block_cap(cfg, 2, name) if name else 25,
                                   key=f"b2_cap_{i}")
-            b2_names.append(name)
-            b2_caps.append((name, cap))
+            b2_names.append((name, cap))
 
     st.subheader("Block 3")
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("**Normal Subjects**")
-        b3n_names = []
-        b3n_caps = []
         for i in range(2):
             col1, col2 = st.columns([3, 1])
             val = cfg.get('block_3_normal', [''] * 2)[i]
             name = col1.text_input(f"Subject {i + 1}", value=val, key=f"b3n_{i}")
             cap = col2.number_input(f"Cap", min_value=1, max_value=99,
-                                    value=cfg['capacities'].get(name, 25) if name else 25,
+                                    value=_block_cap(cfg, 3, name) if name else 25,
                                     key=f"b3n_cap_{i}")
-            b3n_names.append(name)
-            b3n_caps.append((name, cap))
+            b3n_names.append((name, cap))
 
     with c2:
         st.markdown("**Applied Learning (ApL)**")
-        b3a_names = []
-        b3a_caps = []
         for i in range(3):
             col1, col2 = st.columns([3, 1])
             val = cfg.get('block_3_apl', [''] * 3)[i]
             name = col1.text_input(f"Subject {i + 1}", value=val, key=f"b3a_{i}")
             cap = col2.number_input(f"Cap", min_value=1, max_value=99,
-                                    value=cfg['capacities'].get(name, 15) if name else 15,
+                                    value=_block_cap(cfg, 3, name) if name else 15,
                                     key=f"b3a_cap_{i}")
-            b3a_names.append(name)
-            b3a_caps.append((name, cap))
+            b3a_names.append((name, cap))
 
-    common = [s for s in b1_names if s and s in b2_names]
-    if len(common) == 1:
-        cfg['repeated_subject'] = common[0]
-        st.info(f"Repeated subject (appears in both Block 1 & 2): **{common[0]}**")
-    elif len(common) > 1:
-        cfg['repeated_subject'] = st.selectbox("Select repeated subject:", common)
+    b1_just_names = [n for n, _ in b1_names]
+    b2_just_names = [n for n, _ in b2_names]
+    b3n_just_names = [n for n, _ in b3n_names]
+
+    all_subjects_with_blocks = {}
+    for bnum, subs in [(1, b1_just_names), (2, b2_just_names), (3, b3n_just_names)]:
+        for s in subs:
+            if s:
+                all_subjects_with_blocks.setdefault(s, []).append(bnum)
+
+    repeated_candidates = {s: bs for s, bs in all_subjects_with_blocks.items() if len(bs) >= 2}
+
+    rep_info = cfg.get('repeated_subject', {})
+    if isinstance(rep_info, dict):
+        prev_rep_name = rep_info.get('name', '')
+        prev_rep_blocks = rep_info.get('blocks', [])
     else:
-        cfg['repeated_subject'] = ""
-        if all(b1_names) and all(b2_names):
-            st.warning("No subject appears in both Block 1 and Block 2. "
-                       "Add the same subject name to both blocks to set a repeated subject.")
+        prev_rep_name = rep_info
+        prev_rep_blocks = [1, 2]
+
+    st.divider()
+    st.subheader("Repeated Subject")
+    if repeated_candidates:
+        rep_names = list(repeated_candidates.keys())
+        rep_name = st.selectbox(
+            "Select repeated subject (appears in multiple blocks):",
+            options=[""] + rep_names,
+            index=(rep_names.index(prev_rep_name) + 1) if prev_rep_name in rep_names else 0,
+        )
+        if rep_name:
+            possible_blocks = repeated_candidates[rep_name]
+            st.info(f"**{rep_name}** appears in: Block {', '.join(str(b) for b in possible_blocks)}")
+            rep_blocks = st.multiselect(
+                "Which two blocks should the repeated subject span?",
+                options=possible_blocks,
+                default=[b for b in prev_rep_blocks if b in possible_blocks] or possible_blocks[:2],
+                max_selections=2,
+            )
+            cfg['repeated_subject'] = {"name": rep_name, "blocks": sorted(rep_blocks)}
+        else:
+            cfg['repeated_subject'] = {"name": "", "blocks": []}
+    else:
+        cfg['repeated_subject'] = {"name": "", "blocks": []}
+        if all(b1_just_names) and all(b2_just_names) and all(b3n_just_names):
+            st.warning("No subject appears in multiple blocks. "
+                       "Use the same subject name in two different blocks to set a repeated subject.")
 
     if st.button("Save Configuration"):
-        cfg['block_1'] = b1_names
-        cfg['block_2'] = b2_names
-        cfg['block_3_normal'] = b3n_names
-        cfg['block_3_apl'] = b3a_names
-        caps = {}
-        for name, cap in b1_caps + b2_caps + b3n_caps + b3a_caps:
-            if name:
-                caps[name] = cap
-        cfg['capacities'] = caps
+        cfg['block_1'] = [n for n, _ in b1_names]
+        cfg['block_2'] = [n for n, _ in b2_names]
+        cfg['block_3_normal'] = [n for n, _ in b3n_names]
+        cfg['block_3_apl'] = [n for n, _ in b3a_names]
+
+        caps = cfg.setdefault('capacities', {1: {}, 2: {}, 3: {}})
+        for block_num, items in [(1, b1_names), (2, b2_names), (3, b3n_names + b3a_names)]:
+            caps.setdefault(block_num, {})
+            for name, cap in items:
+                if name:
+                    caps[block_num][name] = cap
 
         errors = validate_config(cfg)
         if errors:
