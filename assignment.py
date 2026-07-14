@@ -168,8 +168,8 @@ def assign_students(config, students_df):
                 row = students.loc[idx]
                 composite = (
                     (row['Marks'] / max_m * 100) * 0.6 +
-                    (row.get('ApL_Preference_Score', 0) or 0) * 0.1 +
-                    (row.get('Interview_Score', 0) or 0) * 0.3
+                    (row.get('ApL_Preference_Score', 0) or 0) +
+                    (row.get('Interview_Score', 0) or 0)
                 )
                 students.loc[idx, '_apl_composite'] = composite
 
